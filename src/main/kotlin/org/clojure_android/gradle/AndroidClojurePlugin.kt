@@ -82,8 +82,9 @@ class AndroidClojurePlugin : Plugin<Project> {
     /**
      * Adds the appropriate runtime dependencies for this variant:
      * - runtime-core is always added
-     * - runtime-repl is added for debug builds (or when replEnabled is explicitly true)
-     * - When REPL is enabled, stock Clojure is substituted with patched Clojure
+     * - When dynamic compilation is enabled (or implied by REPL), stock Clojure
+     *   is substituted with patched Clojure containing AndroidDynamicClassLoader
+     * - runtime-repl is added only when REPL is explicitly enabled
      */
     private fun configureRuntimeDependencies(
         project: Project,
@@ -93,6 +94,8 @@ class AndroidClojurePlugin : Plugin<Project> {
         project.afterEvaluate {
             val isDebug = variant.buildType == "debug"
             val replEnabled = clojureOptions.replEnabled.orNull ?: isDebug
+            // REPL requires dynamic compilation, so force it on when REPL is enabled
+            val dynCompEnabled = replEnabled || (clojureOptions.dynamicCompilationEnabled.orNull ?: isDebug)
 
             // Always add runtime-core
             project.dependencies.add(
@@ -100,37 +103,46 @@ class AndroidClojurePlugin : Plugin<Project> {
                 RUNTIME_CORE,
             )
 
-            if (replEnabled) {
-                // Add REPL infrastructure (AndroidDynamicClassLoader, dx, nREPL)
-                project.dependencies.add(
-                    "${variant.name}Implementation",
-                    RUNTIME_REPL,
-                )
-
+            if (dynCompEnabled) {
                 // Substitute stock Clojure with patched version that has
-                // Android-aware RT.makeClassLoader()
+                // Android-aware RT.makeClassLoader() and AndroidDynamicClassLoader
                 project.configurations.named("${variant.name}CompileClasspath").configure {
                     resolutionStrategy.dependencySubstitution {
                         substitute(module("org.clojure:clojure"))
                             .using(module(PATCHED_CLOJURE))
-                            .because("Patched RT.makeClassLoader() for Android REPL support")
+                            .because("Patched RT.makeClassLoader() for Android dynamic compilation")
                     }
                 }
                 project.configurations.named("${variant.name}RuntimeClasspath").configure {
                     resolutionStrategy.dependencySubstitution {
                         substitute(module("org.clojure:clojure"))
                             .using(module(PATCHED_CLOJURE))
-                            .because("Patched RT.makeClassLoader() for Android REPL support")
+                            .because("Patched RT.makeClassLoader() for Android dynamic compilation")
                     }
                 }
+            }
 
+            if (replEnabled) {
+                // Add REPL infrastructure (nREPL server, Android socket stubs)
+                project.dependencies.add(
+                    "${variant.name}Implementation",
+                    RUNTIME_REPL,
+                )
                 project.logger.info(
                     "Clojure REPL enabled for variant '${variant.name}' " +
                         "(port ${clojureOptions.nreplPort.get()})",
                 )
-            } else {
+            }
+
+            if (dynCompEnabled && !replEnabled) {
                 project.logger.info(
-                    "Clojure REPL disabled for variant '${variant.name}' (AOT-only)",
+                    "Clojure dynamic compilation enabled for variant '${variant.name}' (no REPL)",
+                )
+            }
+
+            if (!dynCompEnabled) {
+                project.logger.info(
+                    "Clojure dynamic compilation disabled for variant '${variant.name}' (AOT-only)",
                 )
             }
         }

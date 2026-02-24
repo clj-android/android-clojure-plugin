@@ -14,9 +14,24 @@ abstract class ClojureOptionsExtension {
     abstract val warnOnReflection: Property<Boolean>
 
     /**
-     * Whether to include REPL infrastructure (nREPL server, dynamic classloader,
-     * dx library) in the build variant. When false, only AOT-compiled Clojure
-     * code is included and no dynamic compilation is possible at runtime.
+     * Whether to include the dynamic classloader and enable dynamic Clojure
+     * compilation at runtime. When true, stock Clojure is substituted with a
+     * patched version containing [AndroidDynamicClassLoader] which can compile
+     * and load Clojure code on-device.
+     *
+     * This is required for any runtime code evaluation (e.g. apps that eval
+     * user-provided Clojure expressions). It is also automatically enabled
+     * when [replEnabled] is true, since nREPL requires dynamic compilation.
+     *
+     * Default: true for debug builds, false for release builds.
+     * A null value means "use the default for this build type".
+     */
+    abstract val dynamicCompilationEnabled: Property<Boolean>
+
+    /**
+     * Whether to include nREPL server infrastructure in the build variant.
+     * When true, the runtime-repl module is added and [ClojureApp] will
+     * auto-start an nREPL server. Implies [dynamicCompilationEnabled].
      *
      * Default: true for debug builds, false for release builds.
      * A null value means "use the default for this build type".
