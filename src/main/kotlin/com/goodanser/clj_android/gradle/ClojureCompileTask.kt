@@ -1,4 +1,4 @@
-package org.clojure_android.gradle
+package com.goodanser.clj_android.gradle
 
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.ConfigurableFileCollection

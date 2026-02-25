@@ -4,7 +4,7 @@ plugins {
     `maven-publish`
 }
 
-group = "org.clojure-android"
+group = "com.goodanser.clj-android"
 version = "0.5.0-SNAPSHOT"
 description = "Clojure plugin for the Gradle-based Android build system"
 
@@ -33,8 +33,8 @@ dependencies {
 gradlePlugin {
     plugins {
         create("androidClojure") {
-            id = "org.clojure-android.android-clojure"
-            implementationClass = "org.clojure_android.gradle.AndroidClojurePlugin"
+            id = "com.goodanser.clj-android.android-clojure"
+            implementationClass = "com.goodanser.clj_android.gradle.AndroidClojurePlugin"
             displayName = "Android Clojure Plugin"
             description = "Integrates Clojure AOT compilation into Android Gradle builds"
         }

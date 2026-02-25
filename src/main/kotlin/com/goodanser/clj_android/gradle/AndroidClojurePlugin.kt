@@ -1,4 +1,4 @@
-package org.clojure_android.gradle
+package com.goodanser.clj_android.gradle
 
 import com.android.build.api.artifact.ScopedArtifact
 import com.android.build.api.variant.AndroidComponentsExtension
@@ -21,9 +21,9 @@ class AndroidClojurePlugin : Plugin<Project> {
             "com.android.library",
         )
 
-        private const val RUNTIME_CORE = "org.clojure-android:runtime-core:0.1.0-SNAPSHOT"
-        private const val RUNTIME_REPL = "org.clojure-android:runtime-repl:0.1.0-SNAPSHOT"
-        private const val PATCHED_CLOJURE = "org.clojure-android:clojure:1.12.0-1"
+        private const val RUNTIME_CORE = "com.goodanser.clj-android:runtime-core:0.1.0-SNAPSHOT"
+        private const val RUNTIME_REPL = "com.goodanser.clj-android:runtime-repl:0.1.0-SNAPSHOT"
+        private const val PATCHED_CLOJURE = "com.goodanser.clj-android:clojure:1.12.0-1"
     }
 
     override fun apply(project: Project) {
@@ -47,7 +47,7 @@ class AndroidClojurePlugin : Plugin<Project> {
         project.afterEvaluate {
             if (!configured) {
                 throw ProjectConfigurationException(
-                    "The 'org.clojure-android.android-clojure' plugin requires " +
+                    "The 'com.goodanser.clj-android.android-clojure' plugin requires " +
                         "an Android plugin ('com.android.application' or 'com.android.library') " +
                         "to be applied.",
                     listOf(),
@@ -103,22 +103,24 @@ class AndroidClojurePlugin : Plugin<Project> {
                 RUNTIME_CORE,
             )
 
-            if (dynCompEnabled) {
-                // Substitute stock Clojure with patched version that has
-                // Android-aware RT.makeClassLoader() and AndroidDynamicClassLoader
-                project.configurations.named("${variant.name}CompileClasspath").configure {
-                    resolutionStrategy.dependencySubstitution {
-                        substitute(module("org.clojure:clojure"))
-                            .using(module(PATCHED_CLOJURE))
-                            .because("Patched RT.makeClassLoader() for Android dynamic compilation")
-                    }
+            // Always substitute stock Clojure with patched version.
+            // The patched RT.makeClassLoader() falls back gracefully to stock
+            // DynamicClassLoader when AndroidDynamicClassLoader is absent
+            // (release builds), so it's safe for all variants. This also
+            // ensures spec.alpha and core.specs.alpha are on the classpath
+            // for AOT compilation.
+            project.configurations.named("${variant.name}CompileClasspath").configure {
+                resolutionStrategy.dependencySubstitution {
+                    substitute(module("org.clojure:clojure"))
+                        .using(module(PATCHED_CLOJURE))
+                        .because("Patched Clojure with correct POM dependencies for AOT compilation")
                 }
-                project.configurations.named("${variant.name}RuntimeClasspath").configure {
-                    resolutionStrategy.dependencySubstitution {
-                        substitute(module("org.clojure:clojure"))
-                            .using(module(PATCHED_CLOJURE))
-                            .because("Patched RT.makeClassLoader() for Android dynamic compilation")
-                    }
+            }
+            project.configurations.named("${variant.name}RuntimeClasspath").configure {
+                resolutionStrategy.dependencySubstitution {
+                    substitute(module("org.clojure:clojure"))
+                        .using(module(PATCHED_CLOJURE))
+                        .because("Patched Clojure with correct POM dependencies for AOT compilation")
                 }
             }
 
