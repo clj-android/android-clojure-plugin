@@ -219,6 +219,15 @@ class AndroidClojurePlugin : Plugin<Project> {
                 if (compileConfig != null) {
                     compilationClasspath.from(compileConfig)
                 }
+
+                // Add compiled Java classes from this project so Clojure can reference them.
+                val javaCompileTaskName = "compile${variantName}JavaWithJavac"
+                val javaCompileTask = project.tasks.findByName(javaCompileTaskName)
+                if (javaCompileTask != null) {
+                    val javacTask = javaCompileTask as org.gradle.api.tasks.compile.JavaCompile
+                    compilationClasspath.from(javacTask.destinationDirectory)
+                    dependsOn(javaCompileTask)
+                }
             }
         }
     }
