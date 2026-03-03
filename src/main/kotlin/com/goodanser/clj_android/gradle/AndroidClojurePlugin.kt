@@ -134,6 +134,15 @@ class AndroidClojurePlugin : Plugin<Project> {
                     "Clojure REPL enabled for variant '${variant.name}' " +
                         "(port ${clojureOptions.nreplPort.get()})",
                 )
+            } else {
+                // Make REPL library available for AOT compilation only — namespaces
+                // that require clj-android.repl.server can compile, but the library
+                // won't be shipped in the APK.  At runtime, repl-available? returns
+                // false when the nREPL classes are absent.
+                project.dependencies.add(
+                    "${variant.name}CompileOnly",
+                    RUNTIME_REPL,
+                )
             }
 
             if (dynCompEnabled && !replEnabled) {
