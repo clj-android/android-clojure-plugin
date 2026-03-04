@@ -72,6 +72,62 @@ abstract class ClojureCompileTask @Inject constructor(
             )
             args(nsList)
         }
+
+        removeTransitivelyCompiledClasses(destDir)
+    }
+
+    /**
+     * Removes class files from the output directory that already exist in
+     * dependency JARs on the classpath. Clojure's AOT compiler transitively
+     * compiles any required namespaces whose .clj source is on the classpath,
+     * which produces duplicate classes when those namespaces are already
+     * provided by a dependency (e.g. clojure.set from the Clojure runtime JAR).
+     * Leaving these duplicates causes "Type X is defined multiple times"
+     * errors during DEX merging.
+     */
+    private fun removeTransitivelyCompiledClasses(destDir: File) {
+        val jarClassPaths = mutableSetOf<String>()
+
+        for (file in compilationClasspath.files) {
+            if (!file.isFile) continue
+            if (!file.name.endsWith(".jar")) continue
+            try {
+                ZipFile(file).use { zip ->
+                    for (entry in zip.entries()) {
+                        if (entry.name.endsWith(".class")) {
+                            jarClassPaths.add(entry.name)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.debug("Could not read JAR ${file.name}: ${e.message}")
+            }
+        }
+
+        if (jarClassPaths.isEmpty()) return
+
+        var removedCount = 0
+        destDir.walkTopDown()
+            .filter { it.isFile && it.name.endsWith(".class") }
+            .forEach { classFile ->
+                val relativePath = destDir.toPath().relativize(classFile.toPath())
+                    .toString().replace('\\', '/')
+                if (relativePath in jarClassPaths) {
+                    classFile.delete()
+                    removedCount++
+                }
+            }
+
+        if (removedCount > 0) {
+            logger.lifecycle(
+                "Removed $removedCount transitively compiled class file(s) " +
+                    "that already exist in dependency JARs",
+            )
+            // Clean up empty directories left behind
+            destDir.walkBottomUp()
+                .filter { it.isDirectory && it != destDir && it.listFiles()?.isEmpty() == true }
+                .forEach { it.delete() }
+        }
     }
 
     /**
