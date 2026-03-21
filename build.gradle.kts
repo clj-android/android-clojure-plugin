@@ -30,6 +30,22 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
+// Generate build-info.properties so the plugin can detect stale daemon classloaders.
+val generateBuildInfo = tasks.register("generateBuildInfo") {
+    val outputDir = layout.buildDirectory.dir("generated/build-info")
+    val propsFile = outputDir.map { it.file("android-clojure-plugin-build-info.properties") }
+    outputs.dir(outputDir)
+    // Re-run whenever any plugin source file changes.
+    inputs.files(fileTree("src/main/kotlin") { include("**/*.kt") })
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    doLast {
+        val f = propsFile.get().asFile
+        f.parentFile.mkdirs()
+        f.writeText("build.timestamp=${System.currentTimeMillis()}\n")
+    }
+}
+sourceSets["main"].resources.srcDir(generateBuildInfo.map { it.outputs.files.singleFile })
+
 gradlePlugin {
     plugins {
         create("androidClojure") {

@@ -29,6 +29,7 @@ class AndroidClojurePlugin : Plugin<Project> {
 
     override fun apply(project: Project) {
         project.logger.debug("Applying android-clojure plugin")
+        checkForStaleDaemon(project)
 
         val clojureOptions = project.extensions.create(
             "clojureOptions",
@@ -54,6 +55,48 @@ class AndroidClojurePlugin : Plugin<Project> {
                     listOf(),
                 )
             }
+        }
+    }
+
+    /**
+     * Detects when the Gradle daemon has loaded a stale version of this plugin.
+     *
+     * The plugin JAR contains a build-info.properties with the compile timestamp.
+     * If the plugin is consumed via an included build and any source file in that
+     * build is newer than the baked-in timestamp, the daemon's classloader is
+     * serving an outdated version.  Warn the developer to restart the daemon.
+     */
+    private fun checkForStaleDaemon(project: Project) {
+        try {
+            val props = java.util.Properties()
+            val stream = AndroidClojurePlugin::class.java.classLoader
+                .getResourceAsStream("android-clojure-plugin-build-info.properties")
+                ?: return
+            stream.use { props.load(it) }
+            val buildTimestamp = props.getProperty("build.timestamp")?.toLongOrNull() ?: return
+
+            // Find the plugin's source directory via the included build.
+            val pluginBuild = project.gradle.includedBuilds.firstOrNull { included ->
+                included.name == "android-clojure-plugin"
+            } ?: return
+
+            val sourceDir = java.io.File(pluginBuild.projectDir, "src/main/kotlin")
+            if (!sourceDir.isDirectory) return
+
+            val newestSource = sourceDir.walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .maxOfOrNull { it.lastModified() }
+                ?: return
+
+            if (newestSource > buildTimestamp) {
+                project.logger.warn(
+                    "android-clojure-plugin: source files are newer than the loaded plugin. " +
+                        "The Gradle daemon may be serving a stale version. " +
+                        "Run './gradlew --stop' and rebuild.",
+                )
+            }
+        } catch (_: Exception) {
+            // Non-fatal — skip the check silently.
         }
     }
 
