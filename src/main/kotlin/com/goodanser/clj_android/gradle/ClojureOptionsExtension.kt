@@ -44,9 +44,17 @@ abstract class ClojureOptionsExtension {
     /** Namespaces to exclude from AOT compilation. */
     abstract val aotExcludeNamespaces: ListProperty<String>
 
+    // Glob patterns for Clojure source files to exclude from the packaged
+    // APK/AAR resources.  Use this to keep proprietary or internal sources
+    // out of the distributed artifact while still allowing AOT compilation.
+    // Patterns match the resource path inside the archive,
+    // e.g. "com/company/internal/**".
+    abstract val sourceResourceExcludes: ListProperty<String>
+
     init {
         warnOnReflection.convention(false)
         nreplPort.convention(7888)
         aotExcludeNamespaces.convention(emptyList())
+        sourceResourceExcludes.convention(emptyList())
     }
 }

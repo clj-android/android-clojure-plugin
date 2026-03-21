@@ -23,7 +23,7 @@ plugins {
 }
 ```
 
-Clojure sources go in `src/main/clojure/` (mirroring `src/main/java/`). The plugin auto-discovers `.clj` files, compiles them ahead-of-time, and bundles the sources as resources for runtime loading.
+Clojure sources go in `src/main/clojure/` (mirroring `src/main/java/`). The plugin auto-discovers `.clj` files and compiles them ahead-of-time.
 
 ## Configuration
 
@@ -34,8 +34,26 @@ clojureOptions {
     replEnabled.set(true)                   // default: true for debug, false for release
     nreplPort.set(7888)                     // default: 7888
     aotExcludeNamespaces.set(listOf("my.ns.dev-only"))
+    sourceResourceExcludes.set(listOf("com/company/internal/**"))
 }
 ```
+
+### Source bundling
+
+`.clj` source files are bundled as resources in the APK only when dynamic compilation is enabled (debug builds by default). Release builds include only AOT-compiled classes — no source files.
+
+To exclude specific sources from all builds (e.g. proprietary code that should be AOT-compiled but not distributed as source):
+
+```kotlin
+clojureOptions {
+    sourceResourceExcludes.set(listOf(
+        "com/company/internal/**",    // entire package
+        "com/company/secret_ns.clj",  // single file
+    ))
+}
+```
+
+Excluded sources are still AOT-compiled normally — only the `.clj` resource files are stripped from the output.
 
 ## Updating
 

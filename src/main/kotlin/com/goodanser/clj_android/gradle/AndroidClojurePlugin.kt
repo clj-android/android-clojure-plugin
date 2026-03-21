@@ -130,6 +130,7 @@ class AndroidClojurePlugin : Plugin<Project> {
         androidComponents.onVariants { variant ->
             registerClojureCompileTask(project, variant, androidExtension, clojureOptions)
             configureRuntimeDependencies(project, variant, clojureOptions)
+            configureResourcePackaging(project, variant, clojureOptions)
             fixJavaResourceTracking(project, variant, androidExtension)
         }
     }
@@ -293,6 +294,39 @@ class AndroidClojurePlugin : Plugin<Project> {
                     dependsOn(javaCompileTask)
                 }
             }
+        }
+    }
+
+    /**
+     * Controls which Clojure source files are included in the packaged output.
+     *
+     * - When dynamic compilation is disabled (typically release builds),
+     *   all .clj files are excluded — only AOT-compiled classes are needed.
+     * - User-specified [ClojureOptionsExtension.sourceResourceExcludes] patterns
+     *   are always applied (e.g. to strip proprietary sources from the artifact).
+     */
+    private fun configureResourcePackaging(
+        project: Project,
+        variant: Variant,
+        clojureOptions: ClojureOptionsExtension,
+    ) {
+        // User-specified excludes (proprietary sources, etc.) — apply to all variants.
+        for (pattern in clojureOptions.sourceResourceExcludes.get()) {
+            variant.packaging.resources.excludes.add(pattern)
+        }
+
+        // Strip all .clj sources when dynamic compilation is off.
+        // The onVariants callback runs after the build script has configured
+        // clojureOptions, so the property values are final here.
+        val isDebug = variant.buildType == "debug"
+        val replEnabled = clojureOptions.replEnabled.orNull ?: isDebug
+        val dynCompEnabled = replEnabled || (clojureOptions.dynamicCompilationEnabled.orNull ?: isDebug)
+
+        if (!dynCompEnabled) {
+            variant.packaging.resources.excludes.add("**/*.clj")
+            project.logger.info(
+                "Clojure sources excluded from variant '${variant.name}' (dynamic compilation disabled)",
+            )
         }
     }
 
