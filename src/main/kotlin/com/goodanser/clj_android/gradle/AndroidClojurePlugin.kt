@@ -9,6 +9,7 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.ProjectConfigurationException
 import org.gradle.api.plugins.ExtensionAware
+import org.gradle.api.tasks.PathSensitivity
 
 /**
  * Gradle plugin that integrates Clojure AOT compilation into Android builds.
@@ -73,9 +74,20 @@ class AndroidClojurePlugin : Plugin<Project> {
             }
         }
 
+        // Register Clojure source directories as Android Java resources so
+        // .clj files are bundled into the AAR/APK and loadable at runtime.
+        androidExtension.sourceSets.configureEach {
+            val ext = (this as ExtensionAware).extensions
+                .findByType(ClojureSourceDirectorySet::class.java)
+            if (ext != null) {
+                resources.srcDirs(ext.classpath.files.filter { it.isDirectory })
+            }
+        }
+
         androidComponents.onVariants { variant ->
             registerClojureCompileTask(project, variant, androidExtension, clojureOptions)
             configureRuntimeDependencies(project, variant, clojureOptions)
+            fixJavaResourceTracking(project, variant, androidExtension)
         }
     }
 
@@ -236,6 +248,58 @@ class AndroidClojurePlugin : Plugin<Project> {
                     val javacTask = javaCompileTask as org.gradle.api.tasks.compile.JavaCompile
                     compilationClasspath.from(javacTask.destinationDirectory)
                     dependsOn(javaCompileTask)
+                }
+            }
+        }
+    }
+
+    /**
+     * AGP's processJavaRes and mergeJavaResource tasks don't always detect
+     * changes to files in resources.srcDirs, causing stale .clj files in
+     * incremental builds.  Explicitly declare Clojure source trees as tracked
+     * task inputs so Gradle invalidates the tasks when sources change.
+     */
+    private fun fixJavaResourceTracking(
+        project: Project,
+        variant: Variant,
+        androidExtension: BaseExtension,
+    ) {
+        val variantName = variant.name.replaceFirstChar { c -> c.uppercase() }
+
+        project.afterEvaluate {
+            // Collect all Clojure source directories across source sets.
+            val clojureDirs = androidExtension.sourceSets
+                .flatMap { sourceSet ->
+                    val ext = (sourceSet as ExtensionAware).extensions
+                        .findByType(ClojureSourceDirectorySet::class.java)
+                    ext?.classpath?.files?.filter { it.isDirectory } ?: emptySet()
+                }
+
+            if (clojureDirs.isNotEmpty()) {
+                val clojureFiles = project.files(clojureDirs.map { dir ->
+                    project.fileTree(dir) { include("**/*.clj") }
+                })
+
+                // Track .clj source changes in processJavaRes.
+                project.tasks.matching { it.name == "process${variantName}JavaRes" }.configureEach {
+                    inputs.files(clojureFiles)
+                        .withPathSensitivity(PathSensitivity.RELATIVE)
+                        .withPropertyName("clojureSources")
+                }
+            }
+
+            // For app projects, also track library .clj resources flowing
+            // through mergeJavaResource so the merge re-runs when an
+            // included library build updates its .clj files.
+            val isApp = project.plugins.hasPlugin("com.android.application")
+            if (isApp) {
+                project.tasks.matching { it.name == "merge${variantName}JavaResource" }.configureEach {
+                    val runtimeConfig = project.configurations.findByName("${variant.name}RuntimeClasspath")
+                    if (runtimeConfig != null) {
+                        inputs.files(runtimeConfig)
+                            .withPathSensitivity(PathSensitivity.RELATIVE)
+                            .withPropertyName("runtimeClasspathForClojure")
+                    }
                 }
             }
         }
