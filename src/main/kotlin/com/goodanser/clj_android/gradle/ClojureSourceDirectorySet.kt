@@ -35,9 +35,9 @@ class ClojureSourceDirectorySet(
     val classpath: FileCollection
         get() = project.files(*directories.toTypedArray())
 
-    /** Scans source directories for .clj files and returns their namespace names. */
+    /** Scans source directories for .clj files and returns their namespace names (sorted). */
     val namespaces: List<String>
-        get() = classpath.files.flatMap { srcDir -> namespacesIn(srcDir) }
+        get() = classpath.files.flatMap { srcDir -> namespacesIn(srcDir) }.sorted()
 
     private fun namespacesIn(srcDir: File): List<String> {
         if (!srcDir.isDirectory) return emptyList()
