@@ -57,11 +57,16 @@ gradlePlugin {
     }
 }
 
-publishing {
-    repositories {
-        maven {
-            name = "test"
-            url = uri(layout.buildDirectory.dir("test-repo"))
+// Test publishing repo — only configured when explicitly requested via
+// -PpublishToTestRepo to avoid F-Droid scanner flagging it as an unknown
+// maven repository.
+if (findProperty("publishToTestRepo") != null) {
+    publishing {
+        repositories {
+            maven {
+                name = "test"
+                url = uri(layout.buildDirectory.dir("test-repo"))
+            }
         }
     }
 }
